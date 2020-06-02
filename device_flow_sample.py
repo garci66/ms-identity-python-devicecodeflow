@@ -18,19 +18,42 @@ You can then run this sample with a JSON configuration file:
 import sys  # For simplicity, we'll read config file from 1st CLI param sys.argv[1]
 import json
 import logging
+import keyring
 
 import requests
 import msal
-
+import os, atexit, msal
+from cryptography.fernet import Fernet
 
 # Optional logging
-# logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.INFO)
+
+cache = msal.SerializableTokenCache()
+key=None
+if os.path.exists("my_cache.bin"):
+    key=bytes(keyring.get_password("nokia-ad-login", "key"),'utf-8')
+    logging.info(key)
+    f = Fernet(key)
+    cache.deserialize(f.decrypt(open("my_cache.bin", "rb").read()).decode('utf-8'))
+else:
+    key = Fernet.generate_key()
+    keyring.set_password("nokia-ad-login","key", key.decode('utf-8'))
+    f = Fernet(key)
+
+atexit.register(lambda:
+    #open("my_cache.bin", "w").write((cache.serialize()))
+    open("my_cache.bin", "wb").write(f.encrypt(bytes(cache.serialize(),'utf-8')))
+    #open("my_cache.bin", "w").write(bytes(cache.serialize(),'utf-8'))
+    # Hint: The following optional line persists only when state changed
+    if cache.has_state_changed else None
+    )
+
 
 config = json.load(open(sys.argv[1]))
 
 # Create a preferably long-lived app instance which maintains a token cache.
 app = msal.PublicClientApplication(
-    config["client_id"], authority=config["authority"],
+    config["client_id"], authority=config["authority"], token_cache=cache
     # token_cache=...  # Default cache is in memory only.
                        # You can learn how to use SerializableTokenCache from
                        # https://msal-python.rtfd.io/en/latest/#msal.SerializableTokenCache

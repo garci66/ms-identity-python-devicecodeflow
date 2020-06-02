@@ -1,2 +1,4 @@
 requests>=2,<3
 msal>=0,<2
+keyring
+cryptography
